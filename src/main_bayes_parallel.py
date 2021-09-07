@@ -63,6 +63,7 @@ def test_run_bayes(mdp, true_beta, n_episodes, sample_size, first_policy):
         achieved_V, achieved_Q = mdp_solvers.policy_evaluation_MG(mdp, joint_policy)
         payoff.append(achieved_V[mdp.start_state])
         print("Episode", t, "; Achieved Payoff", achieved_V[mdp.start_state])
+        np.savetxt('regret_bayes_part.txt', np.array(payoff))
 
         # Relevant for episode t+1
         print("Episode", t + 1)
@@ -87,7 +88,6 @@ def test_run_bayes(mdp, true_beta, n_episodes, sample_size, first_policy):
                 break
         trajectories.append(trajectory)
         print("Trajectory Length", len(trajectory))
-
         if t == n_episodes - 1:
             break
         # sample from posterior
@@ -230,6 +230,7 @@ print("Optimal Payoff Approx VI", vi_V[mdp.start_state])
 # results
 payoff_optimal_joint = np.full(T + 1, joint_V[mdp.start_state])
 payoff_optimal_vi = np.full(T + 1, vi_V[mdp.start_state])
+np.savetxt('optimal_value.txt', np.array([payoff_optimal_vi, payoff_optimal_joint]))
 
 payoff_bayes = np.zeros(T + 1)
 for i in range(n_iterations):
