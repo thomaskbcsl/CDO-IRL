@@ -246,11 +246,11 @@ for i in range(n_iterations):
         cum_regret_vi[t] = sum(regret_vi[0:t + 1])
         cum_regret_joint[t] = sum(regret_joint[0:t + 1])
     save = np.array([payoff_bayes, regret_vi, regret_joint, cum_regret_vi, cum_regret_joint])
-    np.savetxt(str(i) + 'regret_bayes_2.txt', save)
+    np.savetxt(str(i) + 'regret_bayes_3.txt', save)
     plt.style.use('ggplot')
     plt.plot(cum_regret_vi, label="Context-Dependent Online Bayesian IRL")
     plt.plot(cum_regret_joint, label="w.r.t. joint")
     plt.legend()
     plt.xlabel("Episode")
-    plt.savefig(str(i) + "Partial-Info-Boltz-Dem_2.pdf")
+    plt.savefig(str(i) + "Partial-Info-Boltz-Dem_3.pdf")
     np.savetxt(str(i) + 'first_policy.txt', first_policy)   # to get a fair comparison
