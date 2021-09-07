@@ -168,21 +168,37 @@ class RandomMDP:
         self.current_state = self.start_state
         self.reward_states = [0, 1, 2]  # placeholder
 
-        for s in range(self.n_states):
-            for a in range(self.n_actions_1):
-                center_around = np.random.dirichlet(np.ones(self.n_states)*0.01)     # uniform in simplex
-                for b in range(self.n_actions_2):
-                    self.P[s, a, b] = np.random.dirichlet(center_around*10+0.01)
         # for s in range(self.n_states):
         #     for a in range(self.n_actions_1):
+        #         center_around = np.random.dirichlet(np.ones(self.n_states)*0.01)     # uniform in simplex
         #         for b in range(self.n_actions_2):
-        #             self.P[s, a, b] = np.random.dirichlet(np.ones(self.n_states))
+        #             self.P[s, a, b] = np.random.dirichlet(center_around*10+0.01)
+        for s in range(self.n_states):
+            for a in range(self.n_actions_1):
+                for b in range(self.n_actions_2):
+                    self.P[s, a, b] = np.random.dirichlet(np.ones(self.n_states)/self.n_states)
+        # round the probabilities to avoid floating point errors
+        self.P = np.round(self.P, 5)
+        for s in range(self.n_states):
+            for a in range(self.n_actions_1):
+                for b in range(self.n_actions_2):
+                    summed = 1 - sum(self.P[s, a, b, :])
+                    if summed != 0:
+                        indices = np.where((0 < self.P[s, a, b, :] + summed) & (self.P[s, a, b, :] + summed < 1))[0]
+                        while True:
+                            index = np.random.choice(indices)
+                            if 0 < self.P[s, a, b, index] + summed < 1:
+                                self.P[s, a, b, index] += summed
+                                break
+                            else:
+                                print("ERROR when defining transition probabilities")
+
         # uniform initial state distribution encoded in state 0
         for a in range(self.n_actions_1):
             for b in range(self.n_actions_2):
                 self.P[0, a, b] = np.ones(self.n_states) / self.n_states
         # setting reward function
-        self.R = np.random.beta(0.5, 0.5, self.n_states)*1   # to make the values more legible
+        self.R = np.random.beta(0.5, 0.5, self.n_states)*1
 
     # get a single P(s'|s,a,b)
     def get_transition_probability(self, state, action_1, action_2, next_state):
@@ -205,44 +221,6 @@ class RandomMDP:
                 b = policy_index[1]
                 marg_trans[s, next_state] = self.P[s, a, b, next_state]
         return marg_trans
-
-
-# Define the marginalized MDP given a policy from agent 1
-class ConditionedMDP:
-    def __init__(self, markov_game, policy):
-        self.n_states = markov_game.n_states
-        self.n_actions = markov_game.n_actions
-        self.P = np.zeros([self.n_states, self.n_actions, self.n_states])
-        self.R = markov_game.R  # reward is a function of state only
-        self.gamma = markov_game.gamma
-        self.policy = policy  # policy of agent 1
-        self.start_state = 0
-        self.current_state = self.start_state
-
-        for s in range(self.n_states):
-            for a in range(self.n_actions):
-                for next_state in range(self.n_states):
-                    self.P[s, a, next_state] = np.dot(markov_game.P[s, :, a, next_state], self.policy[s, :])
-
-    # get a single P(j|s,a)
-    def get_transition_probability(self, state, action, next_state):
-        return self.P[state, action, next_state]
-
-    # get the vector P( . | s,a)
-    def get_transition_probabilities(self, state, action):
-        return self.P[state, action, :]
-
-    # get the reward for the current state action
-    def get_reward(self, state):
-        return self.R[state]
-
-    # get the marginalized transition kernel given policies pi_1 and pi_2 (the MDP is already conditioned on policy_1)
-    def get_marginalized_transition_kernel(self, policy_2):
-        marg_P = np.zeros([self.n_states, self.n_states])
-        for s in range(self.n_states):
-            for next_state in range(self.n_states):
-                marg_P[s, next_state] = np.dot(self.P[s, :, next_state], policy_2[s, :])
-        return marg_P
 
 
 

@@ -5,11 +5,12 @@ import mdp_solvers
 import test_bench_linprog
 import helper
 
-# mdp = environments.RandomMDP(n_states=200, n_actions_1=4, n_actions_2=4)
-mdp = environments.MazeMaker()
+mdp = environments.RandomMDP(n_states=200, n_actions_1=4, n_actions_2=4)
+# mdp = environments.MazeMaker()
+
 
 T = 30  # no. of episodes
-iterations = 5  # total iterations over which we average
+iterations = 2  # total iterations over which we average
 
 """ The Case of Full Information and Optimal Demonstrations. """
 

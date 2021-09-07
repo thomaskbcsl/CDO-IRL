@@ -22,7 +22,7 @@ def approx_value_iteration_boltzmann(mdp, beta, delta=0.0001):
                 policy_2[s, a, :] = Q_exponential[s, a, :] / sum(Q_exponential[s, a, :])
                 temp_Q[s, a] = mdp.get_reward(s)
                 for b in range(mdp.n_actions_2):
-                    temp_Q[s, a] += mdp.gamma * np.dot(policy_2[s, a, b] * mdp.get_transition_probabilities(s, a, b), V[:])
+                    temp_Q[s, a] += mdp.gamma * np.dot(policy_2[s, a, b] * np.round(mdp.get_transition_probabilities(s, a, b), 50), V[:])
         for state in range(mdp.n_states):
             max_action = np.argmax(temp_Q[state, :])
             policy_1[state][max_action] = 1

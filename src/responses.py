@@ -20,7 +20,7 @@ def optimal_response(mdp, policy_1):
 """ Get Boltzmann-rational response of agent 2 to the commitment of agent 1. """
 
 
-def boltzmann_response(mdp, policy_1, beta=3):
+def boltzmann_response(mdp, policy_1, beta):
     policy_2 = np.zeros([mdp.n_states, mdp.n_actions_2])
     cond_MDP = environments.ConditionedMDP(mdp, policy_1)
     optimal_policy_2, V, Q = mdp_solvers.value_iteration(cond_MDP)

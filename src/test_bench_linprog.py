@@ -63,7 +63,6 @@ def test_run_linprog(mdp, n_episodes, first_policy):
 
 
 # The maximum-margin linear programming approach introduced by Ng and Russell (2000)
-# TODO: Implement the Algorithm, see https://github.com/aaronsnoswell/irl_methods/blob/master/irl_methods/linear_programming.py
 def ng_and_russell(mdp, first_policy):
     # get (optimal) response of Agent 2
     policy_2, joint_policy = responses.optimal_response(mdp, first_policy)
@@ -76,14 +75,18 @@ def ng_and_russell(mdp, first_policy):
     # get a sorted transition kernel where the action taken by policy_2 is action 0
     new_transition_kernel = cond_MDP.P.copy()
     for s in range(mdp.n_states):
-        new_transition_kernel[s, 0, :] = cond_MDP.P[s, int(vis_policy_2[s]), :]
-        new_transition_kernel[s, int(vis_policy_2[s]), :] = cond_MDP.P[s, 0, :]
+        new_transition_kernel[s, 0, :] = cond_MDP.get_transition_probabilities(s, int(vis_policy_2[s]))
+        new_transition_kernel[s, int(vis_policy_2[s]), :] = cond_MDP.get_transition_probabilities(s, 0)
     cond_MDP.P = new_transition_kernel
     # constraints
     A_ub = np.zeros(shape=[0, mdp.n_states], dtype=float)
-    A_ub = get_constraint_matrix(cond_MDP, policy_2)
+    policy_2_new = np.zeros([mdp.n_states, mdp.n_actions_2])
+    for i in range(mdp.n_states):
+        policy_2_new[i, 0] = 1
+    A_ub = get_constraint_matrix(cond_MDP, policy_2_new)
     # define optimisation direction
     c = np.zeros(shape=[1, mdp.n_states], dtype=float)
+
 
     """ Augment objective to add the maximum-margin heuristic. """
     # Expand the c vector add new terms for the min{} operator

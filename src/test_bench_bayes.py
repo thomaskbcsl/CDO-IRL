@@ -207,13 +207,23 @@ def get_proposal_pdf(mdp, simplex_width, proposed_R, last_R, proposed_beta, last
         pdf_beta_last_given_proposed = scipy.stats.norm(proposed_beta, 1).pdf(last_beta)
 
     # the proposal distribution for the reward function is symmetric, for later reference, we return a placeholder
-    return [1, 1], [1, 1]   # [pdf_beta_proposed_given_last, pdf_beta_last_given_proposed], [1, 1]
+    return [1, 1], [1, 1]  # [pdf_beta_proposed_given_last, pdf_beta_last_given_proposed], [1, 1]
 
 
 # prior distribution beta
 def prior_beta():
     return np.random.exponential(1)
 
+
+""" 
+...
+
+
+
+
+
+
+"""
 
 """ Performance when playing the SAME policy over and over again. """
 

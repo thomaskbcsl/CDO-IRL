@@ -2,20 +2,14 @@ import numpy as np
 import copy
 import scipy.stats
 import matplotlib.pyplot as plt
-from multiprocessing import Pool
 import approx_planning
 import responses
 import mdp_solvers
 import environments
 import helper
 
-""" Code to Run the Experiments """
 
-""" Context-Dependent Online Bayesian IRL via MCMC sampling. """
-
-
-# test run for Partial Information and Boltzmann-rational responses
-def test_run_bayes(mdp, true_beta, n_episodes, sample_size, first_policy):
+def test_run_birl_static(mdp, true_beta, n_episodes, sample_size, first_policy):
     # per episode return
     payoff = [0]
 
@@ -25,17 +19,13 @@ def test_run_bayes(mdp, true_beta, n_episodes, sample_size, first_policy):
 
     # list of trajectories
     trajectories = []
-
-    # save record of conditioned MDPs
-    cond_MDPs = []
+    full_trajectory = []
 
     # prior over rewards
     sampled_rewards.append(np.random.dirichlet(np.ones(mdp.n_states)))
 
     # prior over beta
     sampled_betas.append(prior_beta(mdp, true_beta))
-    # c, d = proposal_distribution(mdp, sampled_rewards[-1], sampled_betas[-1])
-    # A = get_proposal_pdf(mdp, sampled_rewards[-1], c, sampled_betas[-1], d)
 
     for t in range(n_episodes):
         if t == 0:
@@ -51,12 +41,9 @@ def test_run_bayes(mdp, true_beta, n_episodes, sample_size, first_policy):
             for beta in sampled_betas:
                 mean_beta += beta
             mean_beta /= len(sampled_betas)
-            # sampled_rewards.append(mean_reward)
-            # sampled_betas.append(mean_beta)
             print("Mean Reward", mean_reward[0:49])
             print("Mean Beta", mean_beta)
             policy_1, V, Q = approx_planning.approx_value_iteration_boltzmann(new_mdp, mean_beta)
-
         # get Boltzmann-response of Agent 2
         policy_2, joint_policy = responses.boltzmann_response(mdp, policy_1, true_beta)
         # evaluate policy_1
@@ -64,18 +51,9 @@ def test_run_bayes(mdp, true_beta, n_episodes, sample_size, first_policy):
         payoff.append(achieved_V[mdp.start_state])
         print("Episode", t, "; Achieved Payoff", achieved_V[mdp.start_state])
 
-        # Relevant for episode t+1
-        print("Episode", t + 1)
-
-        ########################################################### FOR TESTING ONLY - REMOVE LATER
-        # policy_1 = helper.get_random_policy(mdp)
-        # policy_2, joint_policy = responses.boltzmann_response(mdp, policy_1, true_beta)
-        ############################################################
         # compute trajectory in episode t
         trajectory = []
-        cond_MDP = environments.ConditionedMDP(mdp, policy_1)
-        # add cond_MDP to precomputed MDPs
-        cond_MDPs.append(cond_MDP)
+        cond_MDP = environments.ConditionedMDP(mdp, first_policy)  # always the same policy
         i = 0
         while True:
             state_i = cond_MDP.current_state
@@ -87,83 +65,61 @@ def test_run_bayes(mdp, true_beta, n_episodes, sample_size, first_policy):
                 break
         trajectories.append(trajectory)
         print("Trajectory Length", len(trajectory))
+        full_trajectory = full_trajectory + trajectories[t]
 
         if t == n_episodes - 1:
             break
         # sample from posterior
-        sample_size_now = sample_size   # int(((t+1)**1.3)*100)    # int(sample_size/(n_episodes - t))     # int((n_episodes+1)*100)
-        print("sample size", sample_size_now)
-        sampled_rewards, sampled_betas = sample_from_posterior(mdp, sample_size_now, sampled_rewards[-1], sampled_betas[-1], cond_MDPs, trajectories)
+        sampled_rewards, sampled_betas = sample_from_posterior_static(mdp, sample_size, cond_MDP, sampled_rewards[-1], sampled_betas[-1], full_trajectory)
     return np.array(payoff)
 
 
-# Sample from posterior given trajectories
-def sample_from_posterior(mdp, sample_size, last_episode_last_reward, last_episode_last_beta, cond_MDPs, trajectories):
+def sample_from_posterior_static(mdp, sample_size, cond_MDP, last_reward, last_beta, full_trajectory):
     # results
     sampled_rewards = []
     sampled_betas = []
 
-    # last_reward_function, last_beta = proposal_distribution(mdp, last_episode_last_reward, last_episode_last_beta)
-    last_reward_function = last_episode_last_reward.copy()
-    last_beta = last_episode_last_beta
-    old_likelihood = compute_likelihood_parallel(last_reward_function, last_beta, cond_MDPs, trajectories)
+    # last_reward_function, last_beta = proposal_distribution(mdp, last_reward, last_beta)
+    old_likelihood = compute_likelihood_static(last_reward, last_beta, cond_MDP, full_trajectory)
     for k in range(sample_size):
-        # sample r and beta from proposal distribution
-        proposed_reward_function, proposed_beta = proposal_distribution(mdp, last_reward_function, last_beta)
-        pdfs_beta, pdfs_R = get_proposal_pdf(mdp, proposed_reward_function, last_reward_function, proposed_beta, last_beta)
-
-        # compute P(tau_1, ..., tau_t | r, beta)
-        likelihood = compute_likelihood_parallel(proposed_reward_function, proposed_beta, cond_MDPs, trajectories)
-
-        # p = likelihood / pdfs_beta[0]
-        # p_old = old_likelihood / pdfs_beta[1]
-        p = likelihood
-        p_old = old_likelihood
-
+        proposed_reward_function, proposed_beta = proposal_distribution(mdp, last_reward, last_beta)
+        pdfs_beta, pdfs_R = get_proposal_pdf(mdp, proposed_reward_function, last_reward, proposed_beta, last_beta)
+        likelihood = compute_likelihood_static(proposed_reward_function, proposed_beta, cond_MDP, full_trajectory)
+        p = likelihood / pdfs_beta[0]
+        p_old = old_likelihood / pdfs_beta[1]
         if np.random.uniform(0, 1) < (p / p_old):
-            last_reward_function = proposed_reward_function
+            last_reward = proposed_reward_function
             last_beta = proposed_beta
             old_likelihood = likelihood
             print("Accept new sample in step", k)
             print("Beta", last_beta)
-        sampled_rewards.append(last_reward_function)
+        sampled_rewards.append(last_reward)
         sampled_betas.append(last_beta)
     return sampled_rewards, sampled_betas
 
 
-# compute likelihood MULTIPROCESSING
-def compute_likelihood_parallel(reward_function, beta, cond_MDPs, trajectories):
+def compute_likelihood_static(reward_function, beta, cond_MDP, full_trajectory):
     likelihood = 1
-    # print(__name__)
-    for t in range(len(trajectories)):
-        cond_MDPs[t].R = reward_function
-    if __name__ == '__main__':
-        pool = Pool()
-        Q_matrices = pool.map(task, cond_MDPs)
-        pool.close()
-        pool.join()
-        for t in range(len(trajectories)):
-            Q_exponential = np.exp(beta * Q_matrices[t])
-            for s, b in trajectories[t]:
-                likelihood *= 5 * Q_exponential[s, b] / np.sum(Q_exponential[s, :])
-        return likelihood
-
-
-def task(cond_MDP):
+    cond_MDP.R = reward_function
     policy_2, V, Q_matrix = mdp_solvers.value_iteration(cond_MDP)
-    return Q_matrix
+    for t in range(len(full_trajectory)):
+        Q_exponential = np.exp(beta * Q_matrix)
+        for s, b in full_trajectory:
+            likelihood *= 3 * Q_exponential[s, b] / np.sum(Q_exponential[s, :])
+    return likelihood
 
+
+# Assisting Functions
 
 # We use Uniform over neighbours and clipped Normal(mu, 1) for proposal distributions for the reward function and beta, respectively.
 def proposal_distribution(mdp, last_reward, last_beta):
     # gamma proposal
-    proposed_beta = np.random.gamma(last_beta, 1 + 5 / last_beta)
+    proposed_beta = np.random.gamma(last_beta, 1 + 1 / last_beta)
     proposed_beta = round(proposed_beta, 1)
-
     proposed_beta = last_beta
+    # proposed_beta = 480
 
     # Dirichlet proposal
-    # proposed_reward_function = np.random.dirichlet(last_reward + 0.5)
     proposed_reward_function = np.random.dirichlet(np.ones(mdp.n_states))
     proposed_reward_function = np.round(proposed_reward_function, 5)
     return proposed_reward_function, proposed_beta
@@ -173,18 +129,15 @@ def proposal_distribution(mdp, last_reward, last_beta):
 def get_proposal_pdf(mdp, proposed_R, last_R, proposed_beta, last_beta):
     # for beta: g(proposed | old)
     # eps = 0.5  # add epsilon and compute cdfs as we otherwise face division by zero
-    pdf_beta_proposed_given_last = scipy.stats.gamma(last_beta, 1 + 5 / last_beta).pdf(proposed_beta)  # - scipy.stats.gamma(last_beta, 1).cdf(proposed_beta - eps)
+    pdf_beta_proposed_given_last = scipy.stats.gamma(last_beta, 1 + 1 / last_beta).pdf(proposed_beta)  # - scipy.stats.gamma(last_beta, 1).cdf(proposed_beta - eps)
     # g(old | proposed)
-    pdf_beta_last_given_proposed = scipy.stats.gamma(proposed_beta, 1 + 5 / last_beta).pdf(last_beta)  # - scipy.stats.gamma(proposed_beta, 1).cdf(last_beta - eps)
+    pdf_beta_last_given_proposed = scipy.stats.gamma(proposed_beta, 1 + 1 / last_beta).pdf(last_beta)  # - scipy.stats.gamma(proposed_beta, 1).cdf(last_beta - eps)
 
-    # for R
-    # pdf_reward_proposed_given_last = scipy.stats.dirichlet.pdf(proposed_R, last_R+0.5)    # this has FloatingPointErrors for large state spaces.
-    # pdf_reward_last_given_proposed = scipy.stats.dirichlet.pdf(last_R, proposed_R+0.5)
-    return [1, 1], [1, 1] # [pdf_beta_proposed_given_last + 1e-10, pdf_beta_last_given_proposed + 1e-10], [1, 1]
+    return [pdf_beta_proposed_given_last + 1e-10, pdf_beta_last_given_proposed + 1e-10], [1, 1]
 
 # prior distribution beta
 def prior_beta(mdp, beta):
-    return round(beta * sum(mdp.R), 2)    #np.random.gamma(10, 1)  # 480
+    return round(beta * sum(mdp.R), 2)    # np.random.gamma(10, 1)  # 480
 
 
 # pdf of prior
@@ -192,23 +145,15 @@ def pdf_prior_beta(beta):
     return scipy.stats.gamma(5, 1).pdf(beta)
 
 
-mdp = environments.MazeMaker()    ## beta = 20
-beta = 10   # 480
+mdp = environments.MazeMaker()
+beta = 10
 # mdp = environments.RandomMDP(n_states=200, n_actions_1=4, n_actions_2=4)  ## beta = 10
 # beta = 10  # approx 1000
 mdp.R = mdp.R  # / sum(mdp.R)
-T = 40
+T = 30
 n_iterations = 1
-sample_size = 10000  # no. of samples from posterior
+sample_size = 4000  # no. of samples from posterior
 
-np.seterr('raise')
-
-""" Notes: 
-    1. change back length of trajectories
-    2. clarify the prior over beta
-    3. clarify the posterior over R and beta """
-
-""" The Case of Partial Information and Boltzmann-rational Demonstrations. """
 
 # Get maximal per episode payoff with knowledge of r when playing optimal joint or using approx value iteration
 # Optimal Joint Policy via Centralised Control
@@ -231,10 +176,10 @@ print("Optimal Payoff Approx VI", vi_V[mdp.start_state])
 payoff_optimal_joint = np.full(T + 1, joint_V[mdp.start_state])
 payoff_optimal_vi = np.full(T + 1, vi_V[mdp.start_state])
 
-payoff_bayes = np.zeros(T + 1)
+
 for i in range(n_iterations):
     first_policy = helper.get_random_policy(mdp)
-    payoff_bayes = test_run_bayes(mdp, beta, T, sample_size, first_policy)
+    payoff_bayes = test_run_birl_static(mdp, beta, T, sample_size, first_policy)
     regret_vi = np.zeros(T + 1)  # per-episode regret with respect to oracle vi
     regret_joint = np.zeros(T + 1)  # per-episode regret with respect to oracle joint
     for t in range(1, T + 1):
@@ -246,11 +191,11 @@ for i in range(n_iterations):
         cum_regret_vi[t] = sum(regret_vi[0:t + 1])
         cum_regret_joint[t] = sum(regret_joint[0:t + 1])
     save = np.array([payoff_bayes, regret_vi, regret_joint, cum_regret_vi, cum_regret_joint])
-    np.savetxt(str(i) + 'regret_bayes_2.txt', save)
+    np.savetxt(str(i) + 'regret_bayes_static.txt', save)
     plt.style.use('ggplot')
-    plt.plot(cum_regret_vi, label="Context-Dependent Online Bayesian IRL")
+    plt.plot(cum_regret_vi, label="Static Bayesian IRL")
     plt.plot(cum_regret_joint, label="w.r.t. joint")
     plt.legend()
     plt.xlabel("Episode")
-    plt.savefig(str(i) + "Partial-Info-Boltz-Dem_2.pdf")
-    np.savetxt(str(i) + 'first_policy.txt', first_policy)   # to get a fair comparison
+    plt.savefig(str(i) + "Partial-Info-Boltz-Dem-Static.pdf")
+    plt.savetxt(str(i) + 'first_policy_static.txt', first_policy)

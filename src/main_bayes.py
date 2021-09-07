@@ -17,8 +17,7 @@ np.seterr('raise')
 
 """ Notes: 
     1. change back length of trajectories
-    2. clarify the prior over beta
-    3. clarify the posterior over R and beta """
+"""
 
 """ The Case of Partial Information and Boltzmann-rational Demonstrations. """
 
